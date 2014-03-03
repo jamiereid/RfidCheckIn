@@ -1,41 +1,50 @@
-#include <string.h>
+/**************************************************************************/
+/*! 
+    @file     RfidCheckIn.ino
+    @author   MHV (see git commit logs for individuals)
 
+    This sketch runs MHV's RFID Check In system.
+    An RFID tag is read and then sent to a server using a simple http
+    call; the server then stores the tag in a database with a timestamp
+    for the purposes of counting unique people in the space and when.
+*/
+/**************************************************************************/
+
+// include libraries
+#include <string.h>
 #include <Ethernet.h>
+#include <EthernetClient.h>
 #include <SPI.h>
 #include <HttpClient.h>
-#include <EthernetClient.h>
+#include <SoftwareSerial.h>
+#include <LiquidCrystal.h>
+
+// constants and variables
+#define rxPin 2
+#define txPin 3
+#define buzzerPin 14 // Analog 0
+const int kNetworkTimeout = 30*1000;
+const int kNetworkDelay = 1000;
+
+EthernetClient client;
+LiquidCrystal lcd(4, 5, 6, 7, 8, 9);
+SoftwareSerial rfid( rxPin, txPin );
 
 byte mac[] = { 0xDE, 0xAD, 0xBE, 0xE0, 0xFE, 0xED };
 char server[] = "10.0.0.5";
 
-EthernetClient client;
-
 int numToday;
 
-const int kNetworkTimeout = 30*1000;
-const int kNetworkDelay = 1000;
+byte query[8]  = { 0xAA, 0x00, 0x03, 0x25, 0x26, 0x00, 0x00, 0xBB};
+byte led1[8]   = { 0xAA, 0x00, 0x03, 0x87, 0x18, 0x0a, 0x96, 0xBB};
+byte led2[8]   = { 0xAA, 0x00, 0x03, 0x88, 0x18, 0x0a, 0x99, 0xBB};
+byte buzzer[8] = { 0xAA, 0x00, 0x03, 0x89, 0x18, 0x0a, 0x98, 0xBB};
+byte idle[2]   = { 0x01, 0x83};
 
-#include <SoftwareSerial.h>
+byte* last_seen;
+byte last_seen_length = 0;
 
-byte query[8] = {
-  0xAA, 0x00, 0x03, 0x25, 0x26, 0x00, 0x00, 0xBB};
-byte led1[8] = {
-  0xAA, 0x00, 0x03, 0x87, 0x18, 0x0a, 0x96, 0xBB};
-byte led2[8] = {
-  0xAA, 0x00, 0x03, 0x88, 0x18, 0x0a, 0x99, 0xBB};
-byte buzzer[8] = {
-  0xAA, 0x00, 0x03, 0x89, 0x18, 0x0a, 0x98, 0xBB};
-  
-byte idle[2] = {0x01, 0x83};
-
-#define rxPin 2
-#define txPin 3
-#define buzzerPin 14 // Analog 0
-SoftwareSerial rfid( rxPin, txPin );
-
-#include <LiquidCrystal.h>
-LiquidCrystal lcd(4, 5, 6, 7, 8, 9);
-
+// functions
 void scan_tone() {
   tone(buzzerPin, 1976, 150); // B6
 }
@@ -70,44 +79,6 @@ void reset_lcd() {
       lcd.print(" checkins today");
     }
 }
-
-void setup() 
-{
-  scan_tone();
-  
-  numToday = 0;
-  
-  Serial.begin(115200);
-  Serial.println("Starting the RFID Checkin thing");
-  
-  lcd.begin(20, 4);
-  lcd.print("MakeHackVoid");
-  lcd.setCursor(0,1);
-  lcd.print("Waiting for an IP");
-  
-  while (Ethernet.begin(mac) != 1)
-  {
-    Serial.println("Error getting IP address via DHCP, trying again...");
-    lcd.setCursor(0,2);
-    lcd.print("No IP yet. Waiting.");
-    delay(5000);
-  }
-  
-  rfid.begin(9600);
-  
-  Serial.println("Ready to go!");
-  lcd.setCursor(0,3);
-  lcd.print("Ready to go!");
-  success_tone();
-  delay(1000);
-  reset_lcd();
-}
-
-
-byte* last_seen;
-byte last_seen_length = 0;
-
-
 
 int checkin(const char* asciiID) {
   EthernetClient c;
@@ -182,6 +153,39 @@ int checkin(const char* asciiID) {
   http.stop(); 
   free(body);
   return 0;
+}
+
+// Main
+void setup() 
+{
+  scan_tone();
+  
+  numToday = 0;
+  
+  Serial.begin(115200);
+  Serial.println("Starting the RFID Checkin thing");
+  
+  lcd.begin(20, 4);
+  lcd.print("MakeHackVoid");
+  lcd.setCursor(0,1);
+  lcd.print("Waiting for an IP");
+  
+  while (Ethernet.begin(mac) != 1)
+  {
+    Serial.println("Error getting IP address via DHCP, trying again...");
+    lcd.setCursor(0,2);
+    lcd.print("No IP yet. Waiting.");
+    delay(5000);
+  }
+  
+  rfid.begin(9600);
+  
+  Serial.println("Ready to go!");
+  lcd.setCursor(0,3);
+  lcd.print("Ready to go!");
+  success_tone();
+  delay(1000);
+  reset_lcd();
 }
 
 void loop()
